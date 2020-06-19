@@ -1,10 +1,14 @@
 using System;
+using System.Collections.Generic;
+using System.IdentityModel.Tokens.Jwt;
 using System.IO;
 using System.Linq;
+using System.Security.Claims;
 using System.Threading.Tasks;
 using Microsoft.Azure.Management.Media;
 using Microsoft.Azure.Management.Media.Models;
 using Microsoft.Azure.Storage.Blob;
+using Microsoft.IdentityModel.Tokens;
 
 namespace Insights.VideoPackager
 {
@@ -180,6 +184,189 @@ namespace Insights.VideoPackager
             return transform;
         }
 
+        public async Task<string> StreamProtected(string assetName, string locatorName, string contentPolicyName)
+        {
+            await GetOrCreateContentPolicy(contentPolicyName);
+
+            var locator =
+                await _client.StreamingLocators.GetAsync(_option.ResourceGroupName, _option.AccountName, locatorName);
+
+            if (locator == null)
+            {
+                locator = await _client.StreamingLocators.CreateAsync(_option.ResourceGroupName, _option.AccountName,
+                    locatorName, new StreamingLocator()
+                    {
+                        AssetName = assetName,
+                        DefaultContentKeyPolicyName = contentPolicyName,
+                        StreamingPolicyName = PredefinedStreamingPolicy.MultiDrmCencStreaming
+                    });
+            }
+
+            var keyIdentifier = locator.ContentKeys
+                .Where(k => k.Type == StreamingLocatorContentKeyType.CommonEncryptionCenc)
+                .Select(x => x.Id.ToString())
+                .First();
+
+            return keyIdentifier;
+        }
+
+        public async Task<string> CreateToken(string policyName, string keyIdentifier)
+        {
+            var policy = await
+                _client.ContentKeyPolicies.GetAsync(_option.ResourceGroupName, _option.AccountName, policyName);
+            if (policy == null)
+            {
+                throw new ArgumentException("Policy is not existed");
+            }
+
+            var policyProperties =
+                await _client.ContentKeyPolicies.GetPolicyPropertiesWithSecretsAsync(_option.ResourceGroupName,
+                    _option.AccountName, policyName);
+            if (!(policyProperties.Options[0].Restriction is ContentKeyPolicyTokenRestriction restriction))
+            {
+                throw new InvalidOperationException("Policy not include a token key");
+            }
+
+            if (!(restriction.PrimaryVerificationKey is ContentKeyPolicySymmetricTokenKey signingKey))
+            {
+                throw new InvalidOperationException("Policy not include a token key");
+            }
+
+            var tokenSigningKey = new SymmetricSecurityKey(signingKey.KeyValue);
+            var cred = new SigningCredentials(
+                tokenSigningKey,
+                SecurityAlgorithms.HmacSha256,
+                SecurityAlgorithms.Sha256Digest);
+
+            var claims = new Claim[]
+            {
+                new Claim(ContentKeyPolicyTokenClaim.ContentKeyIdentifierClaim.ClaimType, keyIdentifier)
+            };
+
+            // To set a limit on how many times the same token can be used to request a key or a license.
+            // add  the "urn:microsoft:azure:mediaservices:maxuses" claim.
+            // For example, claims.Add(new Claim("urn:microsoft:azure:mediaservices:maxuses", 4));
+
+            var token = new JwtSecurityToken(
+                issuer: _option.Issuer,
+                audience: _option.Audience,
+                claims: claims,
+                notBefore: DateTime.Now.AddMinutes(-5),
+                expires: DateTime.Now.AddMinutes(60),
+                signingCredentials: cred);
+
+            var handler = new JwtSecurityTokenHandler();
+            return handler.WriteToken(token);
+        }
+
+        private async Task<byte[]> GetOrCreateContentPolicy(string policyName)
+        {
+            var policy = await
+                _client.ContentKeyPolicies.GetAsync(_option.ResourceGroupName, _option.AccountName, policyName);
+            if (policy == null)
+            {
+                var primaryKey = new ContentKeyPolicySymmetricTokenKey(_option.TokenKey);
+                var requiredClaims = new List<ContentKeyPolicyTokenClaim>()
+                {
+                    ContentKeyPolicyTokenClaim.ContentKeyIdentifierClaim
+                };
+
+                var restriction = new ContentKeyPolicyTokenRestriction(_option.Issuer, _option.Audience, primaryKey, ContentKeyPolicyRestrictionTokenType.Jwt, null, requiredClaims);
+
+                var options = new List<ContentKeyPolicyOption>()
+                {
+                    new ContentKeyPolicyOption()
+                    {
+                        Name = "playReady",
+                        Configuration = ConfigurePlayReadyLicenseTemplate(),
+                        Restriction = restriction
+                    },
+                    new ContentKeyPolicyOption()
+                    {
+                        Name = "winevine",
+                        Configuration = ConfigureWidevineLicenseTemplate(),
+                        Restriction = restriction
+                    }
+                };
+
+                await _client.ContentKeyPolicies.CreateOrUpdateAsync(_option.ResourceGroupName, _option.AccountName,
+                    policyName, options);
+            }
+
+            var policyProperties =
+                await _client.ContentKeyPolicies.GetPolicyPropertiesWithSecretsAsync(_option.ResourceGroupName,
+                    _option.AccountName, policyName);
+
+            if (policyProperties.Options[0].Restriction is ContentKeyPolicyTokenRestriction restriction2)
+            {
+                if (restriction2.PrimaryVerificationKey is ContentKeyPolicySymmetricTokenKey signingKey)
+                {
+                   return signingKey.KeyValue;
+                }
+            }
+
+            return _option.TokenKey;
+        }
+
+        private static ContentKeyPolicyPlayReadyConfiguration ConfigurePlayReadyLicenseTemplate()
+        {
+            var objContentKeyPolicyPlayReadyLicense = new ContentKeyPolicyPlayReadyLicense
+            {
+                AllowTestDevices = true,
+                BeginDate = new DateTime(2016, 1, 1),
+                ContentKeyLocation = new ContentKeyPolicyPlayReadyContentEncryptionKeyFromHeader(),
+                ContentType = ContentKeyPolicyPlayReadyContentType.UltraVioletStreaming,
+                LicenseType = ContentKeyPolicyPlayReadyLicenseType.Persistent,
+                PlayRight = new ContentKeyPolicyPlayReadyPlayRight
+                {
+                    ImageConstraintForAnalogComponentVideoRestriction = true,
+                    ExplicitAnalogTelevisionOutputRestriction = new ContentKeyPolicyPlayReadyExplicitAnalogTelevisionRestriction(true, 2),
+                    AllowPassingVideoContentToUnknownOutput = ContentKeyPolicyPlayReadyUnknownOutputPassingOption.Allowed
+                }
+            };
+
+            ContentKeyPolicyPlayReadyConfiguration objContentKeyPolicyPlayReadyConfiguration = new ContentKeyPolicyPlayReadyConfiguration
+            {
+                Licenses = new List<ContentKeyPolicyPlayReadyLicense> { objContentKeyPolicyPlayReadyLicense }
+            };
+
+            return objContentKeyPolicyPlayReadyConfiguration;
+        }
+
+        private static ContentKeyPolicyWidevineConfiguration ConfigureWidevineLicenseTemplate()
+        {
+            WidevineTemplate template = new WidevineTemplate()
+            {
+                AllowedTrackTypes = "SD_HD",
+                ContentKeySpecs = new ContentKeySpec[]
+                {
+                    new ContentKeySpec()
+                    {
+                        TrackType = "SD",
+                        SecurityLevel = 1,
+                        RequiredOutputProtection = new OutputProtection()
+                        {
+                            HDCP = "HDCP_NONE"
+                        }
+                    }
+                },
+                PolicyOverrides = new PolicyOverrides()
+                {
+                    CanPlay = true,
+                    CanPersist = true,
+                    CanRenew = false,
+                    RentalDurationSeconds = 2592000,
+                    PlaybackDurationSeconds = 10800,
+                    LicenseDurationSeconds = 604800,
+                }
+            };
+
+            ContentKeyPolicyWidevineConfiguration objContentKeyPolicyWidevineConfiguration = new ContentKeyPolicyWidevineConfiguration
+            {
+                WidevineTemplate = Newtonsoft.Json.JsonConvert.SerializeObject(template)
+            };
+            return objContentKeyPolicyWidevineConfiguration;
+        }
     }
 
     internal class StreamingEndpointMissingException : Exception
