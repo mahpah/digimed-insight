@@ -368,12 +368,4 @@ namespace Insights.VideoPackager
             return objContentKeyPolicyWidevineConfiguration;
         }
     }
-
-    internal class StreamingEndpointMissingException : Exception
-    {
-    }
-
-    internal class OutputExistsException : Exception
-    {
-    }
 }

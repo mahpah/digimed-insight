@@ -1,0 +1,39 @@
+<h3>Video</h3>
+
+<div class="mb-4">
+  <app-video-uploader></app-video-uploader>
+</div>
+
+<div class="text-center py-5" *ngIf="isLoading">
+  <i class="fad fa-spinner-third fa-spin"></i>
+</div>
+
+<ng-container *ngIf="!isLoading && videos?.length">
+  <table class="table table-bordered">
+    <thead>
+      <th class="text-right">#</th>
+      <th>Name</th>
+      <th>State</th>
+      <th>Elapsed date</th>
+      <th></th>
+    </thead>
+    <tbody>
+      <tr *ngFor="let item of videos; let i = index">
+        <td class="text-right">{{i + 1}}</td>
+        <td>
+          <strong>{{item.name}}</strong>
+          <div class="text-muted small">{{item.file}}</div>
+          <div class="text-muted small">Input: {{item.input}}</div>
+          <div class="text-muted small">Output: {{item.output}}</div>
+        </td>
+        <td>{{item.state}}</td>
+        <td>{{item.elapsedTime}}</td>
+        <td>
+          <a class="btn btn-sm btn-outline-primary" [routerLink]="['play', item.output]">
+            <i class="fad fa-play-circle"></i> Play
+          </a>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</ng-container>

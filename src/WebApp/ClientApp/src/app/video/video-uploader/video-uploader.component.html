@@ -1,0 +1,45 @@
+<div class="d-flex align-items-center">
+  <label class="btn-upload btn btn-primary btn-sm" for="btnUpload">
+    <i class="fad fa-upload"></i> Select files to upload
+    <input type="file" accept="video/*" id="btnUpload" (change)="onFileSelected($event)" multiple>
+  </label>
+
+  <div class="ml-auto" *ngIf="videoUploadService.queue.length">
+    <button type="button" class="btn btn-outline-warning btn-sm" (click)="videoUploadService.abort()">
+      <i class="fad fa-times-circle"></i>
+      Abort
+    </button>
+    <button type="button" [disabled]="!videoUploadService.queue.length" class="ml-1 btn-outline-danger btn-sm" (click)="videoUploadService.clear()">
+      <i class="fad fa-trash"></i>
+    </button>
+  </div>
+</div>
+<div class="table-responsive mt-2" *ngIf="videoUploadService.queue.length">
+  <table class="table-striped">
+    <tbody>
+      <tr *ngFor="let item of videoUploadService.queue" class="upload-item" [ngClass]="item.status">
+        <td class="file-name">{{item.file.name}}</td>
+        <td>
+          <div class="progress">
+            <div class="progress-bar" role="progressbar" [ngStyle]="{width: (item.progress | percent)}" [attr.aria-valuenow]="item.progress * 100" aria-valuemin="0" aria-valuemax="1">
+              {{item.progress | percent}}
+            </div>
+          </div>
+        </td>
+        <td class="text-right">
+          <span [ngSwitch]="item.status">
+            <ng-container *ngSwitchCase="'pending'"><i class="fad fa-clock text-muted"></i></ng-container>
+            <ng-container *ngSwitchCase="'init'"><i class="fad fa-clock text-secondary"></i></ng-container>
+            <ng-container *ngSwitchCase="'uploading'"><i class="fad fa-spinner-third fa-spin text-primary"></i></ng-container>
+            <ng-container *ngSwitchCase="'finalizing'"><i class="fad fa-clock text-primary"></i></ng-container>
+            <ng-container *ngSwitchCase="'success'"><i class="fad fa-check-circle text-success"></i></ng-container>
+            <ng-container *ngSwitchCase="'error'">
+              <i class="fad fa-exclamation-triangle text-danger" [attr.title]="item.errorMessage"></i>
+            </ng-container>
+            <ng-container *ngSwitchCase="'cancelled'"><i class="fad fa-times-circle text-warning"></i></ng-container>
+          </span>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>

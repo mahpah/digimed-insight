@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using WebApp.Utils;
 
 namespace WebApp
 {
@@ -13,7 +14,9 @@ namespace WebApp
     {
         public static void Main(string[] args)
         {
-            CreateHostBuilder(args).Build().Run();
+            CreateHostBuilder(args).Build()
+                .Init()
+                .Run();
         }
 
         public static IHostBuilder CreateHostBuilder(string[] args) =>
@@ -21,6 +24,10 @@ namespace WebApp
                 .ConfigureWebHostDefaults(webBuilder =>
                 {
                     webBuilder.UseStartup<Startup>();
+                    webBuilder.ConfigureKestrel(options =>
+                    {
+                        options.Limits.MaxRequestBodySize = int.MaxValue;
+                    });
                 });
     }
 }

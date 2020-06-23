@@ -1,0 +1,18 @@
+<h3 appBreadcrumb label="Video player">Video player</h3>
+
+<div class="py-5 text-center text-muted" *ngIf="isLoading">
+  <i class="fad fa-spinner-third fa-spin"></i> Loading
+</div>
+
+<ng-container *ngIf="!isLoading">
+  <h5>Shaka player</h5>
+  <div class="position-relative">
+    <p *ngIf="!isLoading && !isShakaSupported" class="alert alert-warning">Sorry, your browser is not supported</p>
+    <app-shaka-player *ngIf="drmManifestPath && isShakaSupported" [accessToken]="accessToken" [manifestPath]="drmManifestPath"></app-shaka-player>
+  </div>
+
+  <h5 class="mt-4">Azure media player</h5>
+  <div class="mb-4">
+    <app-azure-media-player *ngIf="aesManifestPath" [accessToken]="aesAccessToken" [manifestPath]="aesManifestPath"></app-azure-media-player>
+  </div>
+</ng-container>

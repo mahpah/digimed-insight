@@ -1,0 +1,11 @@
+<nav aria-label="breadcrumb">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item active">
+      <a routerLink="/"><i class="fad fa-home"></i> Home</a>
+    </li>
+    <li class="breadcrumb-item" *ngFor="let item of items">
+      <a *ngIf="item.path" routerLinkActive="active" [routerLink]="item.path">{{item.label}}</a>
+      <a *ngIf="!item.path">{{item.label}}</a>
+    </li>
+  </ol>
+</nav>
