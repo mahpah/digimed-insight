@@ -1,10 +1,8 @@
-using System;
 using System.Threading.Tasks;
 using Insights.VideoPackager.Azure;
 using MediatR;
-using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Logging;
 using WebApp.Commands;
 using WebApp.Commands.CommandResults;
 using WebApp.Queries;
@@ -12,7 +10,7 @@ using WebApp.Queries.QueryResults;
 
 namespace WebApp.Controllers
 {
-    [ApiController, Route("api/[controller]")]
+    [ApiController, Route("api/[controller]"), Authorize]
     public class VideoController : ControllerBase
     {
         private readonly IMediator _mediator;
